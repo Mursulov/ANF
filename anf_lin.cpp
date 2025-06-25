@@ -4,8 +4,8 @@
 #include <bitset>
 #include <ctime>
 #include <random>
-#include <windows.h>
-
+#include <termios.h>
+#include <unistd.h>
 
 std::vector<int> live_truth_table_input(int n = 6) {
     int N = 1 << n;
@@ -14,35 +14,29 @@ std::vector<int> live_truth_table_input(int n = 6) {
     std::cout << "Backspace — удалить, Enter — завершить ввод (при 64 значениях).\n";
     std::cout.flush();
 
-    HANDLE hStdin = GetStdHandle(STD_INPUT_HANDLE);
-    DWORD mode;
-    GetConsoleMode(hStdin, &mode);
-    SetConsoleMode(hStdin, mode & ~(ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT));
+    termios oldt, newt;
+    tcgetattr(STDIN_FILENO, &oldt);
+    newt = oldt;
+    newt.c_lflag &= ~(ICANON | ECHO);
+    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
 
     while (true) {
-        INPUT_RECORD ir;
-        DWORD cnt;
-        ReadConsoleInput(hStdin, &ir, 1, &cnt);
-
-        if (ir.EventType == KEY_EVENT && ir.Event.KeyEvent.bKeyDown) {
-            char ch = ir.Event.KeyEvent.uChar.AsciiChar;
-            if ((ch == '\r' || ch == '\n') && tt.size() == N) {
-                std::cout << std::endl;
-                break;
-            }
-            if ((ch == 8 || ch == 127) && !tt.empty()) {
-                tt.pop_back();
-            } else if ((ch == '0' || ch == '1') && (int)tt.size() < N) {
-                tt.push_back(ch - '0');
-            }
-          
-            std::cout << "\r";
-            for (auto v : tt) std::cout << v;
-            std::cout << std::string(N - tt.size(), '_') << "  [" << tt.size() << "/" << N << "]";
-            std::cout.flush();
+        char ch = getchar();
+        if ((ch == '\n' || ch == '\r') && tt.size() == N) {
+            std::cout << std::endl;
+            break;
         }
+        if ((ch == 127 || ch == 8) && !tt.empty()) {
+            tt.pop_back();
+        } else if ((ch == '0' || ch == '1') && (int)tt.size() < N) {
+            tt.push_back(ch - '0');
+        }
+        std::cout << "\r";
+        for (auto v : tt) std::cout << v;
+        std::cout << std::string(N - tt.size(), '_') << "  [" << tt.size() << "/" << N << "]";
+        std::cout.flush();
     }
-    SetConsoleMode(hStdin, mode);
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
     std::cout << std::endl;
     return tt;
 }
@@ -73,15 +67,14 @@ std::vector<int> anf_from_truth_table(const std::vector<int>& tt) {
     return anf;
 }
 
-
 std::string monomial_to_str(int idx, int n = 6) {
     if (idx == 0) return "1";
     std::string s;
     bool first = true;
-    for (int i = n - 1; i >= 0; --i) { 
+    for (int i = n - 1; i >= 0; --i) {
         if (idx & (1 << i)) {
             if (!first) s += "*";
-            s += "x" + std::to_string(n - i); 
+            s += "x" + std::to_string(n - i);
             first = false;
         }
     }
@@ -105,13 +98,12 @@ void print_anf(const std::vector<int>& anf) {
     std::cout << std::endl;
 }
 
-
 void print_truth_table(const std::vector<int>& tt) {
     std::cout << "\nТаблица истинности:\n";
     std::cout << "x1\tx2\tx3\tx4\tx5\tx6\tF\n";
     for (int i = 0; i < 64; ++i) {
         std::bitset<6> bits(i);
-        for (int j = 5; j >= 0; --j) { // x1...x6
+        for (int j = 5; j >= 0; --j) {
             std::cout << bits[j] << "\t";
         }
         std::cout << tt[i] << std::endl;
@@ -119,9 +111,6 @@ void print_truth_table(const std::vector<int>& tt) {
 }
 
 int main() {
-    SetConsoleOutputCP(CP_UTF8);
-    SetConsoleCP(CP_UTF8);
-
     std::vector<int> tt;
 
     std::cout << "Выберите способ задания вектора значений:\n";
